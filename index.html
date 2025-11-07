@@ -1,150 +1,255 @@
-<script type="module">
-  // Firebase SDKs (carregados direto do CDN)
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
-  import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-  import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-storage.js";
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Diário do Casal</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#ff6b6b;--muted:#9aa4b2;--glass: rgba(255,255,255,0.03)}
+    *{box-sizing:border-box}
+    body{font-family:Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial; margin:0; background:linear-gradient(180deg,#071022 0%, #071826 60%); color:#e6eef6; min-height:100vh}
+    .wrap{max-width:1100px;margin:32px auto;padding:20px}
+    header{display:flex;gap:16px;align-items:center;justify-content:space-between}
+    .brand{display:flex;gap:12px;align-items:center}
+    .logo{width:56px;height:56px;border-radius:12px;background:linear-gradient(135deg,var(--accent),#ff9a9a);display:flex;align-items:center;justify-content:center;font-weight:700;color:#102027}
+    h1{font-size:20px;margin:0}
+    p.lead{margin:0;color:var(--muted)}
+    .controls{display:flex;gap:8px}
+    button, input[type=file]{background:var(--card);color:inherit;border:0;padding:10px 12px;border-radius:10px;cursor:pointer}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .layout{display:grid;grid-template-columns:360px 1fr;gap:20px;margin-top:22px}
+    .panel{background:var(--card);padding:16px;border-radius:14px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    form .row{display:flex;gap:8px;margin-bottom:10px}
+    label{font-size:13px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type=text], textarea, input[type=date]{width:100%;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.03);background:transparent;color:inherit}
+    textarea{min-height:100px;resize:vertical}
+    .thumb{width:100%;height:220px;border-radius:10px;background:var(--glass);display:flex;align-items:center;justify-content:center;color:var(--muted);overflow:hidden}
+    .thumb img{width:100%;height:100%;object-fit:cover}
+    .gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:12px;overflow:hidden;cursor:pointer;border:1px solid rgba(255,255,255,0.03)}
+    .card img{width:100%;height:140px;object-fit:cover;display:block}
+    .meta{padding:10px}
+    .meta h3{margin:0;font-size:15px}
+    .meta p{margin:6px 0 0;font-size:13px;color:var(--muted)}
+    .empty{padding:40px;text-align:center;color:var(--muted);border-radius:10px}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,0.55),rgba(0,0,0,0.75));z-index:60}
+    .modal.open{display:flex}
+    .viewer{width:90%;max-width:900px;background:#091021;border-radius:12px;overflow:hidden}
+    .viewer .figure{height:520px;background:#04101b;display:flex;align-items:center;justify-content:center}
+    .viewer img{max-width:100%;max-height:100%;object-fit:contain}
+    .viewer .info{padding:14px;display:flex;align-items:center;justify-content:space-between}
+    .viewer .info .left{max-width:75%}
+    .viewer .info h2{margin:0}
+    .viewer .info p{margin:6px 0 0;color:var(--muted)}
+    .tiny{font-size:13px;color:var(--muted)}
+    .row-between{display:flex;gap:8px;align-items:center}
+    footer{margin-top:20px;text-align:center;color:var(--muted);font-size:13px}
+    @media (max-width:900px){.layout{grid-template-columns:1fr} .viewer .figure{height:360px}}
+  </style>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">
+        <div class="logo">❤</div>
+        <div>
+          <h1>Diário do Casal</h1>
+          <p class="lead">Registre fotos, lembranças e momentos especiais — só vocês dois.</p>
+        </div>
+      </div>
+      <div class="controls">
+        <button id="exportBtn">Exportar JSON</button>
+        <button id="importBtn" class="ghost">Importar</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none">
+        <button id="clearBtn" class="ghost">Limpar tudo</button>
+      </div>
+    </header>
+    <section class="layout">
+      <aside class="panel">
+        <h3>Adicionar momento</h3>
+        <form id="momentForm">
+          <div class="row">
+            <div style="flex:1">
+              <label>Título</label>
+              <input id="title" type="text" placeholder="Ex: Nosso primeiro show juntos">
+            </div>
+          </div>
+          <div class="row">
+            <div style="flex:1">
+              <label>Data</label>
+              <input id="date" type="date">
+            </div>
+          </div>
+          <div>
+            <label>Descrição</label>
+            <textarea id="desc" placeholder="O que aconteceu nesse dia?"></textarea>
+          </div>
+          <div style="margin-top:10px">
+            <label>Foto</label>
+            <div class="thumb" id="thumb">Arraste ou clique para carregar
+              <input id="photoInput" type="file" accept="image/*" style="position:absolute;inset:0;opacity:0;cursor:pointer">
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button type="submit">Salvar momento</button>
+            <button id="cancel" type="button" class="ghost">Limpar</button>
+          </div>
+        </form>
+      </aside>
+      <main>
+        <div class="panel">
+          <h3>Galeria de momentos</h3>
+          <div id="gallery" class="gallery" style="margin-top:12px"></div>
+          <div id="empty" class="empty" style="display:none">Nenhum momento registrado ainda. Adicione o primeiro à esquerda!</div>
+        </div>
+        <div class="panel" style="margin-top:12px">
+          <h3>Linha do tempo</h3>
+          <div id="timeline" style="margin-top:10px"></div>
+        </div>
+      </main>
+    </section>
+    <footer>Feito com carinho — sincronizado online para qualquer dispositivo.</footer>
+  </div>
 
-  // ✅ Configuração do Firebase
-  const firebaseConfig = {
-    apiKey: "AIzaSyCLxiMUiF-PhsWL_E8JyztRhEUuMWoafTw",
-    authDomain: "diario-casal.firebaseapp.com",
-    projectId: "diario-casal",
-    storageBucket: "diario-casal.firebasestorage.app",
-    messagingSenderId: "701183585004",
-    appId: "1:701183585004:web:7f6262d02a50ed434293c9"
-  };
+  <div id="modal" class="modal" aria-hidden="true">
+    <div class="viewer" role="dialog" aria-modal="true">
+      <div class="figure" id="modalFigure"></div>
+      <div class="info">
+        <div class="left">
+          <h2 id="modalTitle"></h2>
+          <p id="modalDate" class="tiny"></p>
+          <p id="modalDesc" style="margin-top:8px;color:var(--muted)"></p>
+        </div>
+        <div class="row-between" style="padding-left:8px">
+          <button id="deleteBtn" class="ghost">Excluir</button>
+          <button id="closeBtn">Fechar</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
-  // ✅ Inicializa Firebase
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  const storage = getStorage(app);
+  <script>
+    // Inicializar Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyCLxiMUiF-PhsWL_E8JyztRhEUuMWoafTw",
+      authDomain: "diario-casal.firebaseapp.com",
+      projectId: "diario-casal",
+      storageBucket: "diario-casal.firebasestorage.app",
+      messagingSenderId: "701183585004",
+      appId: "1:701183585004:web:7f6262d02a50ed434293c9"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const storage = firebase.storage();
 
-  // =====================================================
-  // ✅ AGORA VAI SALVAR ONLINE no Firestore e Storage
-  // =====================================================
+    // DOM Elements
+    const galleryEl = document.getElementById('gallery')
+    const timelineEl = document.getElementById('timeline')
+    const emptyEl = document.getElementById('empty')
+    const form = document.getElementById('momentForm')
+    const titleIn = document.getElementById('title')
+    const dateIn = document.getElementById('date')
+    const descIn = document.getElementById('desc')
+    const photoInput = document.getElementById('photoInput')
+    const thumb = document.getElementById('thumb')
+    const modal = document.getElementById('modal')
+    const modalFigure = document.getElementById('modalFigure')
+    const modalTitle = document.getElementById('modalTitle')
+    const modalDate = document.getElementById('modalDate')
+    const modalDesc = document.getElementById('modalDesc')
+    const deleteBtn = document.getElementById('deleteBtn')
 
-  // --- DOM Elements (iguais ao seu código)
-  const galleryEl = document.getElementById('gallery')
-  const timelineEl = document.getElementById('timeline')
-  const emptyEl = document.getElementById('empty')
-  const form = document.getElementById('momentForm')
-  const titleIn = document.getElementById('title')
-  const dateIn = document.getElementById('date')
-  const descIn = document.getElementById('desc')
-  const photoInput = document.getElementById('photoInput')
-  const thumb = document.getElementById('thumb')
-  const modal = document.getElementById('modal')
-  const modalFigure = document.getElementById('modalFigure')
-  const modalTitle = document.getElementById('modalTitle')
-  const modalDate = document.getElementById('modalDate')
-  const modalDesc = document.getElementById('modalDesc')
-  const deleteBtn = document.getElementById('deleteBtn')
+    let items = [], currentImageData = null, currentViewId = null
 
-  let items = []
-  let currentImageData = null
-  let currentViewId = null
+    // Carregar momentos em tempo real
+    db.collection("momentos").orderBy("date", "desc")
+      .onSnapshot(snapshot => {
+        items = []
+        snapshot.forEach(doc => items.push({id: doc.id, ...doc.data()}))
+        renderAll()
+      })
 
-  // ✅ Carregar momentos do Firestore em tempo real
-  const refMoments = collection(db, "momentos")
-  onSnapshot(refMoments, async (snap) => {
-    items = []
-    snap.forEach(doc => items.push({id: doc.id, ...doc.data()}))
-    renderAll()
-  })
+    // Salvar novo momento
+    form.addEventListener('submit', async e=>{
+      e.preventDefault()
+      const title = titleIn.value.trim() || 'Momento sem título'
+      const date = dateIn.value || new Date().toISOString().slice(0,10)
+      const desc = descIn.value.trim()
+      let imageUrl = ""
+      if(currentImageData){
+        const storageRef = storage.ref(`fotos/${Date.now()}.jpg`)
+        await storageRef.putString(currentImageData, 'data_url')
+        imageUrl = await storageRef.getDownloadURL()
+      }
+      db.collection("momentos").add({title, date, desc, image: imageUrl})
+      clearForm()
+    })
 
-  // ✅ Enviar foto + salvar no Firestore
-  form.addEventListener('submit', async (e)=>{
-    e.preventDefault()
+    function renderAll(){ renderGallery(); renderTimeline(); emptyEl.style.display = items.length ? 'none':'block' }
 
-    const title = titleIn.value.trim() || 'Momento sem título'
-    const date = dateIn.value || new Date().toISOString().slice(0,10)
-    const desc = descIn.value.trim()
-
-    let imageUrl = ""
-    if (currentImageData) {
-      const imageRef = ref(storage, `fotos/${Date.now()}.jpg`)
-      await uploadString(imageRef, currentImageData, 'data_url')
-      imageUrl = await getDownloadURL(imageRef)
+    function renderGallery(){
+      galleryEl.innerHTML = ''
+      items.slice().reverse().forEach(it=>{
+        const c = document.createElement('div')
+        c.className='card'
+        c.dataset.id=it.id
+        c.innerHTML=`<img src="${it.image}"><div class="meta"><h3>${it.title}</h3><p>${it.date||''}</p></div>`
+        c.addEventListener('click', ()=> openModal(it.id))
+        galleryEl.appendChild(c)
+      })
     }
 
-    await addDoc(refMoments, { title, date, desc, image: imageUrl })
-    clearForm()
-  })
-
-  function renderAll(){
-    renderGallery()
-    renderTimeline()
-    emptyEl.style.display = items.length ? 'none' : 'block'
-  }
-
-  function renderGallery(){
-    galleryEl.innerHTML = ''
-    items.slice().reverse().forEach(it => {
-      const c = document.createElement('div')
-      c.className = 'card'
-      c.dataset.id = it.id
-      c.innerHTML = `<img src="${it.image}"><div class="meta"><h3>${it.title}</h3><p>${it.date||''}</p></div>`
-      c.addEventListener('click', ()=> openModal(it.id))
-      galleryEl.appendChild(c)
-    })
-  }
-
-  function renderTimeline(){
-    timelineEl.innerHTML = ''
-    items.slice().sort((a,b)=> new Date(b.date)-new Date(a.date)).forEach(it=>{
-      const d = document.createElement('div')
-      d.style.padding='10px 0'
-      d.innerHTML = `<div style="display:flex;gap:12px;align-items:center">
-        <div style='width:64px;height:64px;border-radius:8px;overflow:hidden'>
-          <img src="${it.image}" style='width:64px;height:64px;object-fit:cover'>
-        </div>
-        <div style='flex:1'>
-          <strong>${it.title}</strong>
-          <div class='tiny'>${it.date||''}</div>
-          <div style='color:var(--muted);margin-top:6px'>${it.desc||''}</div>
-        </div>
-        <div style='padding-left:8px'><button class='ghost' onclick="openModal('${it.id}')">Ver</button></div>
-      </div>`
-      timelineEl.appendChild(d)
-    })
-  }
-
-  // ✅ Mostrar imagem carregada no formulário
-  photoInput.addEventListener('change', (e)=>{
-    const f = e.target.files[0]
-    const reader = new FileReader()
-    reader.onload = ()=>{ currentImageData = reader.result; thumb.innerHTML = `<img src="${reader.result}">` }
-    reader.readAsDataURL(f)
-  })
-
-  function clearForm(){ form.reset(); currentImageData = null; thumb.innerHTML = 'Arraste ou clique para carregar' }
-
-  // ✅ Abrir modal
-  window.openModal = function(id){
-    const it = items.find(x=>x.id===id)
-    currentViewId = id
-    modalFigure.innerHTML = `<img src='${it.image}'>`
-    modalTitle.textContent = it.title
-    modalDate.textContent = it.date
-    modalDesc.textContent = it.desc
-    modal.classList.add('open')
-  }
-
-  document.getElementById('closeBtn').addEventListener('click', ()=> modal.classList.remove('open'))
-
-  // ✅ Excluir momento (Firestore + Storage)
-  deleteBtn.addEventListener('click', async ()=>{
-    if(!confirm("Excluir esse momento definitivamente?")) return
-    const it = items.find(x=>x.id===currentViewId)
-
-    await deleteDoc(doc(db, "momentos", currentViewId))
-
-    // excluir a imagem do storage se tiver
-    if (it.image.includes("firebasestorage")) {
-      const fileRef = ref(storage, it.image)
-      deleteObject(fileRef).catch(()=>{})
+    function renderTimeline(){
+      timelineEl.innerHTML = ''
+      items.slice().sort((a,b)=> new Date(b.date)-new Date(a.date)).forEach(it=>{
+        const d = document.createElement('div')
+        d.style.padding='10px 0'
+        d.innerHTML=`<div style="display:flex;gap:12px;align-items:center">
+          <div style='width:64px;height:64px;border-radius:8px;overflow:hidden'>
+            <img src="${it.image}" style='width:64px;height:64px;object-fit:cover'>
+          </div>
+          <div style='flex:1'>
+            <strong>${it.title}</strong>
+            <div class='tiny'>${it.date||''}</div>
+            <div style='color:var(--muted);margin-top:6px'>${it.desc||''}</div>
+          </div>
+          <div style='padding-left:8px'><button class='ghost' onclick="openModal('${it.id}')">Ver</button></div>
+        </div>`
+        timelineEl.appendChild(d)
+      })
     }
 
-    modal.classList.remove('open')
-  })
-</script>
+    photoInput.addEventListener('change', e=>{
+      const f = e.target.files[0]; if(!f) return
+      const r = new FileReader()
+      r.onload = ()=>{ currentImageData = r.result; thumb.innerHTML=`<img src="${r.result}">` }
+      r.readAsDataURL(f)
+    })
+
+    function clearForm(){ form.reset(); currentImageData=null; thumb.innerHTML='Arraste ou clique para carregar' }
+
+    window.openModal = function(id){
+      const it = items.find(x=>x.id===id)
+      currentViewId=id
+      modalFigure.innerHTML=`<img src='${it.image}'>`
+      modalTitle.textContent=it.title
+      modalDate.textContent=it.date
+      modalDesc.textContent=it.desc
+      modal.classList.add('open')
+    }
+
+    document.getElementById('closeBtn').addEventListener('click', ()=> modal.classList.remove('open'))
+
+    deleteBtn.addEventListener('click', async ()=>{
+      if(!confirm("Excluir esse momento definitivamente?")) return
+      const it = items.find(x=>x.id===currentViewId)
+      await db.collection("momentos").doc(currentViewId).delete()
+      modal.classList.remove('open')
+    })
+  </script>
+</body>
+</html>
